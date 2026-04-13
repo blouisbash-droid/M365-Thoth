@@ -1,13 +1,17 @@
 'use client';
 
 import { useSession, signOut } from 'next-auth/react';
-import { Shield, LogOut, ChevronDown } from 'lucide-react';
+import { Shield, LogOut, ChevronDown, Building2, BarChart2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { cn } from '@/lib/utils';
 
 export default function Navbar() {
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -18,19 +22,43 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  const navLinks = [
+    { href: '/dashboard', label: 'Dashboard', icon: BarChart2 },
+    { href: '/tenants',   label: 'Tenants',   icon: Building2 },
+  ];
+
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-screen-2xl mx-auto px-4 h-14 flex items-center justify-between">
-        {/* Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600">
-            <Shield className="w-4 h-4 text-white" />
+        {/* Logo + nav */}
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600">
+              <Shield className="w-4 h-4 text-white" />
+            </div>
+            <span className="font-semibold text-slate-900 text-sm hidden sm:block">
+              M365 CA Dashboard
+            </span>
           </div>
-          <div className="leading-tight">
-            <span className="font-semibold text-slate-900 text-sm">M365</span>
-            <span className="text-slate-400 text-sm"> / </span>
-            <span className="font-semibold text-slate-900 text-sm">Conditional Access</span>
-          </div>
+
+          {/* Nav links */}
+          <nav className="flex items-center gap-1">
+            {navLinks.map(({ href, label, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                  pathname === href
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-slate-600 hover:bg-slate-100',
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </Link>
+            ))}
+          </nav>
         </div>
 
         {/* User menu */}

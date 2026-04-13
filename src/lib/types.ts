@@ -95,3 +95,23 @@ export interface SignInsApiResponse {
   value: SignInLog[];
   nextLink: string | null;
 }
+
+// ─── MSP Multi-Tenant Config ──────────────────────────────────────────────────
+
+/**
+ * A customer tenant registered with the MSP dashboard.
+ * No client secret is stored here — the MSP's own app credentials are used
+ * to acquire app-only tokens for every connected tenant (client_credentials flow).
+ */
+export interface TenantConfig {
+  /** Internal UUID, generated on creation */
+  id: string;
+  /** Human-readable name shown in the dashboard (e.g. "Contoso Corp") */
+  name: string;
+  /** The customer's Azure AD / Entra tenant ID (GUID) */
+  tenantId: string;
+  /** Optional free-text notes (contact, contract, etc.) */
+  notes?: string;
+  /** ISO date this tenant was added */
+  createdAt: string;
+}
