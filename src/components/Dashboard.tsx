@@ -1,9 +1,13 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { SignInLog, FilterState, DateRange, TenantConfig } from '@/lib/types';
+import {
+  PublicClientApplication,
+  InteractionRequiredAuthError,
+} from '@azure/msal-browser';
+import type { AccountInfo } from '@azure/msal-browser';
+import { SignInLog, FilterState, DateRange } from '@/lib/types';
 import { processSignIn, computeStats, getOSLabel } from '@/lib/utils';
-import Link from 'next/link';
 import Navbar from './Navbar';
 import SummaryCards from './SummaryCards';
 import {
@@ -14,10 +18,18 @@ import {
 } from './ComplianceChart';
 import FilterBar from './FilterBar';
 import SignInTable from './SignInTable';
-import { AlertCircle, Loader2, RefreshCw, Building2, ChevronDown } from 'lucide-react';
+import ConfigForm from './ConfigForm';
+import { AlertCircle, Loader2, RefreshCw, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  AppConfig,
+  buildMsalConfig,
+  getStoredConfig,
+  clearConfig,
+  GRAPH_SCOPES,
+} from '@/lib/msalConfig';
 
-// ─── Defaults ─────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_FILTERS: FilterState = {
   search: '',
@@ -33,94 +45,14 @@ const DAY_MAP: Record<DateRange, number> = {
   '1d': 1, '7d': 7, '14d': 14, '30d': 30,
 };
 
-// ─── Tenant selector ──────────────────────────────────────────────────────────
+const SELECT_FIELDS = [
+  'id', 'createdDateTime', 'userDisplayName', 'userPrincipalName',
+  'appDisplayName', 'clientAppUsed', 'ipAddress', 'location',
+  'deviceDetail', 'status', 'conditionalAccessStatus',
+  'riskLevelAggregated', 'isInteractive',
+].join(',');
 
-interface TenantSelectorProps {
-  tenants: TenantConfig[];
-  selected: string | null;   // null = MSP own tenant (delegated)
-  onChange: (id: string | null) => void;
-}
-
-function TenantSelector({ tenants, selected, onChange }: TenantSelectorProps) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const current =
-    selected == null
-      ? { label: 'MSP Tenant (delegated)', sub: 'Your own tenant via signed-in user' }
-      : tenants.find(t => t.id === selected)
-        ? { label: tenants.find(t => t.id === selected)!.name, sub: tenants.find(t => t.id === selected)!.tenantId }
-        : { label: 'Unknown tenant', sub: selected };
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300
-                   bg-white text-sm text-slate-700 hover:bg-slate-50 transition-colors
-                   min-w-[220px] max-w-xs"
-      >
-        <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
-        <span className="flex-1 text-left truncate">{current.label}</span>
-        <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 mt-1 w-72 bg-white border border-slate-200 rounded-xl
-                        shadow-lg py-1 z-40 max-h-80 overflow-y-auto">
-          {/* Own tenant option */}
-          <button
-            onClick={() => { onChange(null); setOpen(false); }}
-            className={cn(
-              'w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors flex flex-col gap-0.5',
-              selected === null && 'bg-blue-50',
-            )}
-          >
-            <span className="text-sm font-medium text-slate-800">MSP Tenant (delegated)</span>
-            <span className="text-xs text-slate-400">Your own tenant via signed-in user</span>
-          </button>
-
-          {tenants.length > 0 && (
-            <div className="border-t border-slate-100 mt-1 pt-1">
-              <p className="px-3 py-1 text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                Customer Tenants
-              </p>
-              {tenants.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => { onChange(t.id); setOpen(false); }}
-                  className={cn(
-                    'w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors flex flex-col gap-0.5',
-                    selected === t.id && 'bg-blue-50',
-                  )}
-                >
-                  <span className="text-sm font-medium text-slate-800 truncate">{t.name}</span>
-                  <span className="text-xs text-slate-400 font-mono truncate">{t.tenantId}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="border-t border-slate-100 mt-1 pt-1 px-3 py-2">
-            <Link href="/tenants" className="text-xs text-blue-600 hover:underline">
-              + Manage tenants
-            </Link>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Top non-compliant users mini-table ───────────────────────────────────────
+// ─── Top non-compliant users ──────────────────────────────────────────────────
 
 function TopFailingUsers({ signIns }: { signIns: SignInLog[] }) {
   const users = useMemo(() => {
@@ -158,7 +90,10 @@ function TopFailingUsers({ signIns }: { signIns: SignInLog[] }) {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <div className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                <div className="h-full bg-red-400 rounded-full" style={{ width: `${(u.count / max) * 100}%` }} />
+                <div
+                  className="h-full bg-red-400 rounded-full"
+                  style={{ width: `${(u.count / max) * 100}%` }}
+                />
               </div>
               <span className="text-xs font-semibold text-slate-600 w-8 text-right">{u.count}</span>
             </div>
@@ -179,7 +114,7 @@ function PolicyImpactCallout({ signIns }: { signIns: SignInLog[] }) {
   if (total === 0) return null;
 
   const severity =
-    pct > 30 ? { cls: 'bg-red-50 border-red-200 text-red-800', icon: '🔴' } :
+    pct > 30 ? { cls: 'bg-red-50 border-red-200 text-red-800',     icon: '🔴' } :
     pct > 10 ? { cls: 'bg-amber-50 border-amber-200 text-amber-800', icon: '🟡' } :
                { cls: 'bg-green-50 border-green-200 text-green-700', icon: '🟢' };
 
@@ -195,7 +130,7 @@ function PolicyImpactCallout({ signIns }: { signIns: SignInLog[] }) {
   );
 }
 
-// ─── Risk level mini-table ────────────────────────────────────────────────────
+// ─── Risk level summary ───────────────────────────────────────────────────────
 
 function RiskLevelTable({ signIns }: { signIns: SignInLog[] }) {
   const rows = useMemo(() => {
@@ -224,7 +159,9 @@ function RiskLevelTable({ signIns }: { signIns: SignInLog[] }) {
               style={{ width: total > 0 ? `${(count / total) * 100}%` : '0%' }}
             />
           </div>
-          <span className="text-xs font-medium text-slate-600 w-10 text-right">{count.toLocaleString()}</span>
+          <span className="text-xs font-medium text-slate-600 w-10 text-right">
+            {count.toLocaleString()}
+          </span>
         </li>
       ))}
       {rows.length === 0 && (
@@ -237,30 +174,109 @@ function RiskLevelTable({ signIns }: { signIns: SignInLog[] }) {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const [tenants, setTenants]           = useState<TenantConfig[]>([]);
-  const [selectedTenantId, setSelected] = useState<string | null>(null);
-  const [signIns, setSignIns]           = useState<SignInLog[]>([]);
-  const [isInitialLoad, setIsInitial]   = useState(true);
-  const [isLoadingMore, setLoadMore]    = useState(false);
-  const [hasMore, setHasMore]           = useState(false);
-  const [nextLink, setNextLink]         = useState<string | null>(null);
-  const [error, setError]               = useState<string | null>(null);
-  const [filters, setFilters]           = useState<FilterState>(DEFAULT_FILTERS);
+  // ── Config / MSAL state ────────────────────────────────────────────────────
+  const [mounted, setMounted]       = useState(false);
+  const [config, setConfig]         = useState<AppConfig | null>(null);
+  const msalRef                     = useRef<PublicClientApplication | null>(null);
+  const [account, setAccount]       = useState<AccountInfo | null>(null);
+  const [msalReady, setMsalReady]   = useState(false);
+  const [authError, setAuthError]   = useState<string | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
+  // ── Data state ─────────────────────────────────────────────────────────────
+  const [signIns, setSignIns]         = useState<SignInLog[]>([]);
+  const [isInitialLoad, setIsInitial] = useState(true);
+  const [isLoadingMore, setLoadMore]  = useState(false);
+  const [hasMore, setHasMore]         = useState(false);
+  const [nextLink, setNextLink]       = useState<string | null>(null);
+  const [error, setError]             = useState<string | null>(null);
+  const [filters, setFilters]         = useState<FilterState>(DEFAULT_FILTERS);
+  const abortRef                      = useRef<AbortController | null>(null);
 
-  // ── Load tenant list once on mount ─────────────────────────────────────────
-
+  // ── Step 1: hydrate config from localStorage ───────────────────────────────
   useEffect(() => {
-    fetch('/api/tenants')
-      .then(r => r.json())
-      .then(d => setTenants(d.tenants ?? []))
-      .catch(() => {/* non-fatal */});
+    setMounted(true);
+    setConfig(getStoredConfig());
   }, []);
 
-  // ── Data fetching ───────────────────────────────────────────────────────────
+  // ── Step 2: init MSAL when config is set ──────────────────────────────────
+  useEffect(() => {
+    if (!config) return;
+    setMsalReady(false);
+    setAccount(null);
+    setAuthError(null);
+    msalRef.current = null;
 
-  const loadData = useCallback(async (days: number, tenantId: string | null) => {
+    const instance = new PublicClientApplication(buildMsalConfig(config));
+    instance.initialize()
+      .then(() => {
+        const accounts = instance.getAllAccounts();
+        if (accounts.length > 0) setAccount(accounts[0]);
+        msalRef.current = instance;
+        setMsalReady(true);
+      })
+      .catch((err: Error) => {
+        setAuthError(`Failed to initialise authentication: ${err.message}`);
+        setMsalReady(true);
+      });
+  }, [config]);
+
+  // ── Token acquisition ──────────────────────────────────────────────────────
+  const getToken = useCallback(async (): Promise<string> => {
+    const instance = msalRef.current;
+    const acc = account;
+    if (!instance || !acc) throw new Error('Not authenticated');
+    try {
+      const result = await instance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: acc });
+      return result.accessToken;
+    } catch (e) {
+      if (e instanceof InteractionRequiredAuthError) {
+        const result = await instance.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+        setAccount(result.account);
+        return result.accessToken;
+      }
+      throw e;
+    }
+  }, [account]);
+
+  // ── Sign in ────────────────────────────────────────────────────────────────
+  const handleSignIn = useCallback(async () => {
+    const instance = msalRef.current;
+    if (!instance) return;
+    setAuthError(null);
+    try {
+      const result = await instance.loginPopup({ scopes: GRAPH_SCOPES });
+      setAccount(result.account);
+    } catch (e) {
+      const err = e as Error;
+      if (err.name !== 'BrowserAuthError' || !err.message.includes('user_cancelled')) {
+        setAuthError(`Sign-in failed: ${err.message}`);
+      }
+    }
+  }, []);
+
+  // ── Sign out ───────────────────────────────────────────────────────────────
+  const handleSignOut = useCallback(async () => {
+    const instance = msalRef.current;
+    if (!instance || !account) return;
+    try {
+      await instance.logoutPopup({ account });
+    } catch { /* popup closed */ }
+    setAccount(null);
+    setSignIns([]);
+  }, [account]);
+
+  // ── Reset app settings ────────────────────────────────────────────────────
+  const handleResetConfig = useCallback(() => {
+    clearConfig();
+    setConfig(null);
+    setAccount(null);
+    setMsalReady(false);
+    setSignIns([]);
+    msalRef.current = null;
+  }, []);
+
+  // ── Data fetching (direct Graph API calls) ────────────────────────────────
+  const loadData = useCallback(async (days: number) => {
     if (abortRef.current) abortRef.current.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -271,33 +287,45 @@ export default function Dashboard() {
     setNextLink(null);
     setHasMore(false);
 
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    since.setHours(0, 0, 0, 0);
+    const filterParam = encodeURIComponent(`createdDateTime ge ${since.toISOString()}`);
+    const baseUrl = `https://graph.microsoft.com/v1.0/auditLogs/signIns?$top=999&$select=${SELECT_FIELDS}&$filter=${filterParam}`;
+
     let accumulated: SignInLog[] = [];
     let link: string | null = null;
     let firstPage = true;
 
-    // Build base URL — include tenantId when a customer tenant is selected
-    const baseUrl = tenantId
-      ? `/api/signins?days=${days}&tenantId=${encodeURIComponent(tenantId)}`
-      : `/api/signins?days=${days}`;
-
     try {
       do {
-        const url: string = link
-          ? `/api/signins?nextLink=${encodeURIComponent(link)}${tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : ''}`
-          : baseUrl;
+        const token = await getToken();
+        const url: string = link ?? baseUrl;
 
-        const resp = await fetch(url, { signal: ctrl.signal });
+        const resp = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: ctrl.signal,
+        });
 
         if (!resp.ok) {
           const body = await resp.json().catch(() => ({}));
-          throw new Error(body.error ?? `HTTP ${resp.status}`);
+          const msg: string = body?.error?.message ?? `HTTP ${resp.status}`;
+
+          if (resp.status === 403) {
+            throw new Error(
+              'Access denied. Your account needs one of: Global Administrator, Security Administrator, ' +
+              'Security Reader, Global Reader, or Reports Reader. Also ensure AuditLog.Read.All ' +
+              'admin consent has been granted for this app registration.',
+            );
+          }
+          throw new Error(msg);
         }
 
         const data = await resp.json();
         const page: SignInLog[] = (data.value ?? []).map(processSignIn);
 
         accumulated = [...accumulated, ...page];
-        link = data.nextLink ?? null;
+        link = data['@odata.nextLink'] ?? null;
 
         setSignIns(accumulated);
         setNextLink(link);
@@ -316,34 +344,34 @@ export default function Dashboard() {
     } finally {
       if (!ctrl.signal.aborted) setLoadMore(false);
     }
-  }, []);
+  }, [getToken]);
 
-  // Reload when date range OR selected tenant changes
+  // Reload when date range changes or user signs in
   useEffect(() => {
-    loadData(DAY_MAP[filters.dateRange], selectedTenantId);
+    if (!account || !msalReady) return;
+    loadData(DAY_MAP[filters.dateRange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.dateRange, selectedTenantId]);
+  }, [account, msalReady, filters.dateRange]);
 
   // Manual "load more"
   const handleLoadMore = useCallback(async () => {
     if (!nextLink || isLoadingMore) return;
     setLoadMore(true);
     try {
-      const url = selectedTenantId
-        ? `/api/signins?nextLink=${encodeURIComponent(nextLink)}&tenantId=${encodeURIComponent(selectedTenantId)}`
-        : `/api/signins?nextLink=${encodeURIComponent(nextLink)}`;
-      const resp = await fetch(url);
+      const token = await getToken();
+      const resp = await fetch(nextLink, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await resp.json();
       const page: SignInLog[] = (data.value ?? []).map(processSignIn);
       setSignIns(prev => [...prev, ...page]);
-      setNextLink(data.nextLink ?? null);
-      setHasMore(!!data.nextLink);
+      setNextLink(data['@odata.nextLink'] ?? null);
+      setHasMore(!!data['@odata.nextLink']);
     } catch { /* swallow */ }
     finally { setLoadMore(false); }
-  }, [nextLink, isLoadingMore, selectedTenantId]);
+  }, [nextLink, isLoadingMore, getToken]);
 
-  // ── Client-side filtering ───────────────────────────────────────────────────
-
+  // ── Client-side filtering ──────────────────────────────────────────────────
   const filteredSignIns = useMemo(() => signIns.filter(s => {
     if (filters.search) {
       const q = filters.search.toLowerCase();
@@ -376,87 +404,164 @@ export default function Dashboard() {
     osSystems: [...new Set(signIns.map(s => getOSLabel(s.deviceDetail.operatingSystem)))].sort(),
   }), [signIns]);
 
-  // Current tenant label for the header
-  const tenantLabel = selectedTenantId
-    ? tenants.find(t => t.id === selectedTenantId)?.name ?? 'Customer Tenant'
-    : 'MSP Tenant';
+  // ── Early returns ──────────────────────────────────────────────────────────
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // SSR placeholder — avoid hydration mismatch
+  if (!mounted) return <div className="min-h-screen bg-slate-50" />;
 
+  // No config → show setup form
+  if (!config) return <ConfigForm onSaved={setConfig} />;
+
+  // MSAL initialising
+  if (!msalReady) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="w-7 h-7 animate-spin text-blue-500" />
+        <p className="text-sm text-slate-500">Initialising authentication…</p>
+      </div>
+    </div>
+  );
+
+  // Not signed in → sign-in screen
+  if (!account) return (
+    <div className="min-h-screen flex">
+      {/* Left panel */}
+      <div className="hidden lg:flex flex-col justify-between w-1/2 bg-gradient-to-br
+                      from-blue-700 via-blue-600 to-indigo-700 p-12 text-white">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center">
+            <Shield className="w-5 h-5" />
+          </div>
+          <span className="font-semibold text-lg">M365 Conditional Access</span>
+        </div>
+
+        <div>
+          <h1 className="text-3xl font-bold leading-snug mb-4">
+            Understand your sign-in landscape before enforcing device compliance.
+          </h1>
+          <p className="text-blue-100">
+            Pull live sign-in logs from Microsoft Graph and see exactly which users,
+            apps, and devices would be affected when you require Entra joined,
+            Hybrid joined, or Intune enrolled devices.
+          </p>
+        </div>
+
+        <p className="text-blue-200 text-xs">
+          Requires <strong className="text-white">AuditLog.Read.All</strong> delegated
+          permission and one of: Global Admin, Security Admin, Security Reader, Global
+          Reader, or Reports Reader.
+        </p>
+      </div>
+
+      {/* Right panel */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-slate-50">
+        <div className="w-full max-w-sm">
+          <div className="flex lg:hidden items-center gap-2 mb-8">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Shield className="w-4 h-4 text-white" />
+            </div>
+            <span className="font-semibold">M365 Conditional Access</span>
+          </div>
+
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Sign in</h2>
+          <p className="text-slate-500 text-sm mb-8">
+            Use your Microsoft 365 admin account to access the dashboard.
+          </p>
+
+          {authError && (
+            <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200
+                            rounded-lg p-3 text-red-800 text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              {authError}
+            </div>
+          )}
+
+          <button
+            onClick={handleSignIn}
+            className="w-full flex items-center justify-center gap-3 bg-white border
+                       border-slate-300 rounded-lg px-4 py-3 text-sm font-medium
+                       text-slate-700 hover:bg-slate-50 active:bg-slate-100
+                       transition-colors shadow-sm"
+          >
+            {/* Microsoft logo */}
+            <svg viewBox="0 0 21 21" className="w-5 h-5" aria-hidden>
+              <rect x="1"  y="1"  width="9" height="9" fill="#f25022" />
+              <rect x="11" y="1"  width="9" height="9" fill="#7fba00" />
+              <rect x="1"  y="11" width="9" height="9" fill="#00a4ef" />
+              <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+            </svg>
+            Sign in with Microsoft
+          </button>
+
+          <button
+            onClick={handleResetConfig}
+            className="mt-4 w-full text-xs text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            Change app registration settings
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Authenticated: full dashboard ─────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
+      <Navbar
+        userName={account.name}
+        userEmail={account.username}
+        onSignOut={handleSignOut}
+        onResetConfig={handleResetConfig}
+      />
 
       <main className="max-w-screen-2xl mx-auto px-4 py-6 space-y-5">
 
         {/* Page header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              Conditional Access Readiness
-              <span className="ml-2 text-base font-normal text-slate-400">· {tenantLabel}</span>
-            </h1>
+            <h1 className="text-xl font-bold text-slate-900">Conditional Access Readiness</h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Sign-in analysis for: <em>Require Entra joined, Hybrid Entra joined, or Intune enrolled device</em>
+              Sign-in analysis for:{' '}
+              <em>Require Entra joined, Hybrid Entra joined, or Intune enrolled device</em>
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Tenant selector */}
-            <TenantSelector
-              tenants={tenants}
-              selected={selectedTenantId}
-              onChange={id => {
-                setSelected(id);
-                // Reset per-tenant filter options when switching tenants
-                setFilters(f => ({ ...f, userFilter: '', appFilter: '', osFilter: '' }));
-              }}
-            />
-
-            <button
-              onClick={() => loadData(DAY_MAP[filters.dateRange], selectedTenantId)}
-              disabled={isInitialLoad || isLoadingMore}
-              className="btn btn-secondary shrink-0"
-            >
-              <RefreshCw className={cn('w-4 h-4', (isInitialLoad || isLoadingMore) && 'animate-spin')} />
-              Refresh
-            </button>
-          </div>
+          <button
+            onClick={() => loadData(DAY_MAP[filters.dateRange])}
+            disabled={isInitialLoad || isLoadingMore}
+            className="btn btn-secondary shrink-0"
+          >
+            <RefreshCw className={cn('w-4 h-4', (isInitialLoad || isLoadingMore) && 'animate-spin')} />
+            Refresh
+          </button>
         </div>
 
-        {/* ── Loading ──────────────────────────────────────────────────────── */}
+        {/* Loading */}
         {isInitialLoad && (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-            <p className="text-slate-500 text-sm">
-              Fetching sign-in logs from Microsoft Graph
-              {selectedTenantId ? ` · ${tenantLabel}` : ''}…
-            </p>
+            <p className="text-slate-500 text-sm">Fetching sign-in logs from Microsoft Graph…</p>
           </div>
         )}
 
-        {/* ── Error ───────────────────────────────────────────────────────── */}
+        {/* Error */}
         {error && !isInitialLoad && (
           <div className="card p-5 border-red-200 bg-red-50 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-red-700">Failed to load sign-in logs</p>
               <p className="text-sm text-red-600 mt-0.5">{error}</p>
-              <div className="flex gap-2 mt-2">
-                <button onClick={() => loadData(DAY_MAP[filters.dateRange], selectedTenantId)} className="btn btn-secondary text-xs">
-                  Retry
-                </button>
-                {selectedTenantId && (
-                  <Link href="/tenants" className="btn btn-secondary text-xs">
-                    Check Tenant Setup
-                  </Link>
-                )}
-              </div>
+              <button
+                onClick={() => loadData(DAY_MAP[filters.dateRange])}
+                className="btn btn-secondary text-xs mt-2"
+              >
+                Retry
+              </button>
             </div>
           </div>
         )}
 
-        {/* ── Dashboard content ────────────────────────────────────────────── */}
+        {/* Dashboard content */}
         {!isInitialLoad && !error && (
           <>
             <SummaryCards stats={stats} isLoadingMore={isLoadingMore} />

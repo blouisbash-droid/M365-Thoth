@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import Providers from '@/components/Providers';
 
 export const metadata: Metadata = {
   title: 'M365 Conditional Access Dashboard',
@@ -18,9 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>
-        <Providers>{children}</Providers>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
