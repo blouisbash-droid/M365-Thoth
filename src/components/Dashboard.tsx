@@ -18,16 +18,9 @@ import {
 } from './ComplianceChart';
 import FilterBar from './FilterBar';
 import SignInTable from './SignInTable';
-import ConfigForm from './ConfigForm';
 import { AlertCircle, Loader2, RefreshCw, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  AppConfig,
-  buildMsalConfig,
-  getStoredConfig,
-  clearConfig,
-  GRAPH_SCOPES,
-} from '@/lib/msalConfig';
+import { MSAL_CONFIG, GRAPH_SCOPES } from '@/lib/msalConfig';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -114,7 +107,7 @@ function PolicyImpactCallout({ signIns }: { signIns: SignInLog[] }) {
   if (total === 0) return null;
 
   const severity =
-    pct > 30 ? { cls: 'bg-red-50 border-red-200 text-red-800',     icon: '🔴' } :
+    pct > 30 ? { cls: 'bg-red-50 border-red-200 text-red-800',      icon: '🔴' } :
     pct > 10 ? { cls: 'bg-amber-50 border-amber-200 text-amber-800', icon: '🟡' } :
                { cls: 'bg-green-50 border-green-200 text-green-700', icon: '🟢' };
 
@@ -171,16 +164,25 @@ function RiskLevelTable({ signIns }: { signIns: SignInLog[] }) {
   );
 }
 
+// ─── MSAL instance (module-level singleton) ───────────────────────────────────
+
+let msalInstance: PublicClientApplication | null = null;
+
+async function getMsal(): Promise<PublicClientApplication> {
+  if (!msalInstance) {
+    msalInstance = new PublicClientApplication(MSAL_CONFIG);
+    await msalInstance.initialize();
+  }
+  return msalInstance;
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  // ── Config / MSAL state ────────────────────────────────────────────────────
-  const [mounted, setMounted]       = useState(false);
-  const [config, setConfig]         = useState<AppConfig | null>(null);
-  const msalRef                     = useRef<PublicClientApplication | null>(null);
-  const [account, setAccount]       = useState<AccountInfo | null>(null);
-  const [msalReady, setMsalReady]   = useState(false);
-  const [authError, setAuthError]   = useState<string | null>(null);
+  // ── Auth state ─────────────────────────────────────────────────────────────
+  const [account, setAccount]     = useState<AccountInfo | null>(null);
+  const [msalReady, setMsalReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // ── Data state ─────────────────────────────────────────────────────────────
   const [signIns, setSignIns]         = useState<SignInLog[]>([]);
@@ -192,39 +194,25 @@ export default function Dashboard() {
   const [filters, setFilters]         = useState<FilterState>(DEFAULT_FILTERS);
   const abortRef                      = useRef<AbortController | null>(null);
 
-  // ── Step 1: hydrate config from localStorage ───────────────────────────────
+  // ── Init MSAL on mount ─────────────────────────────────────────────────────
   useEffect(() => {
-    setMounted(true);
-    setConfig(getStoredConfig());
-  }, []);
-
-  // ── Step 2: init MSAL when config is set ──────────────────────────────────
-  useEffect(() => {
-    if (!config) return;
-    setMsalReady(false);
-    setAccount(null);
-    setAuthError(null);
-    msalRef.current = null;
-
-    const instance = new PublicClientApplication(buildMsalConfig(config));
-    instance.initialize()
-      .then(() => {
+    getMsal()
+      .then(instance => {
         const accounts = instance.getAllAccounts();
         if (accounts.length > 0) setAccount(accounts[0]);
-        msalRef.current = instance;
         setMsalReady(true);
       })
       .catch((err: Error) => {
-        setAuthError(`Failed to initialise authentication: ${err.message}`);
+        setAuthError(`Authentication initialisation failed: ${err.message}`);
         setMsalReady(true);
       });
-  }, [config]);
+  }, []);
 
   // ── Token acquisition ──────────────────────────────────────────────────────
   const getToken = useCallback(async (): Promise<string> => {
-    const instance = msalRef.current;
+    const instance = await getMsal();
     const acc = account;
-    if (!instance || !acc) throw new Error('Not authenticated');
+    if (!acc) throw new Error('Not authenticated');
     try {
       const result = await instance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: acc });
       return result.accessToken;
@@ -240,10 +228,9 @@ export default function Dashboard() {
 
   // ── Sign in ────────────────────────────────────────────────────────────────
   const handleSignIn = useCallback(async () => {
-    const instance = msalRef.current;
-    if (!instance) return;
     setAuthError(null);
     try {
+      const instance = await getMsal();
       const result = await instance.loginPopup({ scopes: GRAPH_SCOPES });
       setAccount(result.account);
     } catch (e) {
@@ -256,24 +243,14 @@ export default function Dashboard() {
 
   // ── Sign out ───────────────────────────────────────────────────────────────
   const handleSignOut = useCallback(async () => {
-    const instance = msalRef.current;
-    if (!instance || !account) return;
+    if (!account) return;
     try {
+      const instance = await getMsal();
       await instance.logoutPopup({ account });
     } catch { /* popup closed */ }
     setAccount(null);
     setSignIns([]);
   }, [account]);
-
-  // ── Reset app settings ────────────────────────────────────────────────────
-  const handleResetConfig = useCallback(() => {
-    clearConfig();
-    setConfig(null);
-    setAccount(null);
-    setMsalReady(false);
-    setSignIns([]);
-    msalRef.current = null;
-  }, []);
 
   // ── Data fetching (direct Graph API calls) ────────────────────────────────
   const loadData = useCallback(async (days: number) => {
@@ -309,8 +286,6 @@ export default function Dashboard() {
 
         if (!resp.ok) {
           const body = await resp.json().catch(() => ({}));
-          const msg: string = body?.error?.message ?? `HTTP ${resp.status}`;
-
           if (resp.status === 403) {
             throw new Error(
               'Access denied. Your account needs one of: Global Administrator, Security Administrator, ' +
@@ -318,7 +293,7 @@ export default function Dashboard() {
               'admin consent has been granted for this app registration.',
             );
           }
-          throw new Error(msg);
+          throw new Error(body?.error?.message ?? `HTTP ${resp.status}`);
         }
 
         const data = await resp.json();
@@ -346,7 +321,7 @@ export default function Dashboard() {
     }
   }, [getToken]);
 
-  // Reload when date range changes or user signs in
+  // Reload when account signs in or date range changes
   useEffect(() => {
     if (!account || !msalReady) return;
     loadData(DAY_MAP[filters.dateRange]);
@@ -404,25 +379,14 @@ export default function Dashboard() {
     osSystems: [...new Set(signIns.map(s => getOSLabel(s.deviceDetail.operatingSystem)))].sort(),
   }), [signIns]);
 
-  // ── Early returns ──────────────────────────────────────────────────────────
-
-  // SSR placeholder — avoid hydration mismatch
-  if (!mounted) return <div className="min-h-screen bg-slate-50" />;
-
-  // No config → show setup form
-  if (!config) return <ConfigForm onSaved={setConfig} />;
-
-  // MSAL initialising
+  // ── MSAL initialising ──────────────────────────────────────────────────────
   if (!msalReady) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="flex flex-col items-center gap-3">
-        <Loader2 className="w-7 h-7 animate-spin text-blue-500" />
-        <p className="text-sm text-slate-500">Initialising authentication…</p>
-      </div>
+      <Loader2 className="w-7 h-7 animate-spin text-blue-500" />
     </div>
   );
 
-  // Not signed in → sign-in screen
+  // ── Not signed in → sign-in screen ────────────────────────────────────────
   if (!account) return (
     <div className="min-h-screen flex">
       {/* Left panel */}
@@ -456,6 +420,7 @@ export default function Dashboard() {
       {/* Right panel */}
       <div className="flex-1 flex items-center justify-center p-8 bg-slate-50">
         <div className="w-full max-w-sm">
+          {/* Mobile logo */}
           <div className="flex lg:hidden items-center gap-2 mb-8">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <Shield className="w-4 h-4 text-white" />
@@ -465,7 +430,7 @@ export default function Dashboard() {
 
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Sign in</h2>
           <p className="text-slate-500 text-sm mb-8">
-            Use your Microsoft 365 admin account to access the dashboard.
+            Use your Microsoft 365 account to access the dashboard.
           </p>
 
           {authError && (
@@ -492,13 +457,6 @@ export default function Dashboard() {
             </svg>
             Sign in with Microsoft
           </button>
-
-          <button
-            onClick={handleResetConfig}
-            className="mt-4 w-full text-xs text-slate-400 hover:text-slate-600 transition-colors"
-          >
-            Change app registration settings
-          </button>
         </div>
       </div>
     </div>
@@ -511,7 +469,6 @@ export default function Dashboard() {
         userName={account.name}
         userEmail={account.username}
         onSignOut={handleSignOut}
-        onResetConfig={handleResetConfig}
       />
 
       <main className="max-w-screen-2xl mx-auto px-4 py-6 space-y-5">

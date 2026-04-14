@@ -1,6 +1,6 @@
 'use client';
 
-import { Shield, LogOut, ChevronDown, Settings } from 'lucide-react';
+import { Shield, LogOut, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -8,10 +8,9 @@ interface Props {
   userName?: string;
   userEmail?: string;
   onSignOut: () => void;
-  onResetConfig: () => void;
 }
 
-export default function Navbar({ userName, userEmail, onSignOut, onResetConfig }: Props) {
+export default function Navbar({ userName, userEmail, onSignOut }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -68,14 +67,6 @@ export default function Navbar({ userName, userEmail, onSignOut, onResetConfig }
               <div className="px-3 py-2 border-b border-slate-100">
                 <p className="text-xs text-slate-500 truncate">{userEmail}</p>
               </div>
-              <button
-                onClick={() => { onResetConfig(); setOpen(false); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700
-                           hover:bg-slate-50 transition-colors"
-              >
-                <Settings className="w-4 h-4 text-slate-400" />
-                Change app settings
-              </button>
               <button
                 onClick={() => { onSignOut(); setOpen(false); }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700
