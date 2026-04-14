@@ -218,9 +218,10 @@ export default function Dashboard() {
       return result.accessToken;
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
-        const result = await instance.acquireTokenPopup({ scopes: GRAPH_SCOPES });
-        setAccount(result.account);
-        return result.accessToken;
+        // Use redirect instead of popup to avoid nested popup errors
+        await instance.acquireTokenRedirect({ scopes: GRAPH_SCOPES });
+        // Note: acquireTokenRedirect will redirect and return, code below won't execute
+        throw new Error('Token acquisition requires redirect');
       }
       throw e;
     }
@@ -231,8 +232,8 @@ export default function Dashboard() {
     setAuthError(null);
     try {
       const instance = await getMsal();
-      const result = await instance.loginPopup({ scopes: GRAPH_SCOPES });
-      setAccount(result.account);
+      // Use loginRedirect instead of loginPopup to avoid nested popup issues
+      await instance.loginRedirect({ scopes: GRAPH_SCOPES });
     } catch (e) {
       const err = e as Error;
       if (err.name !== 'BrowserAuthError' || !err.message.includes('user_cancelled')) {
@@ -246,8 +247,9 @@ export default function Dashboard() {
     if (!account) return;
     try {
       const instance = await getMsal();
-      await instance.logoutPopup({ account });
-    } catch { /* popup closed */ }
+      // Use logoutRedirect for consistency and to avoid popup issues
+      await instance.logoutRedirect({ account });
+    } catch { /* logout failed */ }
     setAccount(null);
     setSignIns([]);
   }, [account]);
