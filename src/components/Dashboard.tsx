@@ -197,9 +197,15 @@ export default function Dashboard() {
   // ── Init MSAL on mount ─────────────────────────────────────────────────────
   useEffect(() => {
     getMsal()
-      .then(instance => {
-        const accounts = instance.getAllAccounts();
-        if (accounts.length > 0) setAccount(accounts[0]);
+      .then(async instance => {
+        // Must call handleRedirectPromise to process the auth result after loginRedirect returns
+        const result = await instance.handleRedirectPromise();
+        if (result?.account) {
+          setAccount(result.account);
+        } else {
+          const accounts = instance.getAllAccounts();
+          if (accounts.length > 0) setAccount(accounts[0]);
+        }
         setMsalReady(true);
       })
       .catch((err: Error) => {
