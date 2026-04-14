@@ -16,7 +16,7 @@
  */
 
 /** Your app registration's Application (client) ID */
-export const AZURE_CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
+export const AZURE_CLIENT_ID = '68f790e6-9110-41cb-8096-1a9423e843b6';
 
 /**
  * Authority controls which accounts can sign in:
