@@ -30,8 +30,8 @@ export interface SignInStatus {
 
 /**
  * passes  – device is Entra joined, Hybrid Entra joined, or Intune enrolled
- * fails   – device has partial info but doesn't meet any policy criterion
- * unknown – no device detail available (browser / unknown client)
+ * fails   – device has no info or partial info but doesn't meet any policy criterion
+ * unknown – (deprecated) no longer returned; kept for backwards compatibility
  */
 export type PolicyStatus = 'passes' | 'fails' | 'unknown';
 

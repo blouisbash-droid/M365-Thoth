@@ -36,7 +36,7 @@ export function getDeviceCategory(deviceDetail: DeviceDetail | null): DeviceCate
  *  "Device must be Entra joined, Hybrid Entra joined, OR enrolled in Intune."
  */
 export function getPolicyStatus(deviceDetail: DeviceDetail | null): PolicyStatus {
-  if (!deviceDetail || !deviceDetail.deviceId) return 'unknown';
+  if (!deviceDetail || !deviceDetail.deviceId) return 'fails';
 
   const isEntraJoined = deviceDetail.trustType === 'AzureAD';
   const isHybridJoined = deviceDetail.trustType === 'ServerAD';
