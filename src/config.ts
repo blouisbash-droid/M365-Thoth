@@ -16,7 +16,7 @@
  */
 
 /** Your app registration's Application (client) ID */
-export const AZURE_CLIENT_ID = '68f790e6-9110-41cb-8096-1a9423e843b6';
+export const AZURE_CLIENT_ID = 'e8fccc77-6bca-4109-8e1c-c54b8684c0af';
 
 /**
  * Authority controls which accounts can sign in:
@@ -24,4 +24,4 @@ export const AZURE_CLIENT_ID = '68f790e6-9110-41cb-8096-1a9423e843b6';
  *   'organizations' → any Azure AD work/school account
  *   '<tenant-id>'   → only users from your specific tenant
  */
-export const AZURE_AUTHORITY = 'https://login.microsoftonline.com/common';
+export const AZURE_AUTHORITY = 'https://login.microsoftonline.com/444a999d-a691-44e1-b92d-67f7533e8d03';
