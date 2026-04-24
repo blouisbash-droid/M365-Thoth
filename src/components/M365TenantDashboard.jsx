@@ -308,21 +308,69 @@ function Navbar({ userName, userEmail, tenantName, onSignOut, activeTab, setActi
   );
 }
 
+// ─── License friendly name map ────────────────────────────────────────────────
+const LICENSE_NAMES = {
+  'O365_BUSINESS_ESSENTIALS':'Microsoft 365 Business Basic','O365_BUSINESS_PREMIUM':'Microsoft 365 Business Standard',
+  'SMB_BUSINESS':'Microsoft 365 Apps for Business','SMB_BUSINESS_ESSENTIALS':'Microsoft 365 Business Basic',
+  'SMB_BUSINESS_PREMIUM':'Microsoft 365 Business Standard','SPB':'Microsoft 365 Business Premium',
+  'MICROSOFT_365_BUSINESS':'Microsoft 365 Business Premium','SPE_E3':'Microsoft 365 E3','SPE_E5':'Microsoft 365 E5',
+  'ENTERPRISEPACK':'Microsoft 365 E3','ENTERPRISEPREMIUM':'Microsoft 365 E5',
+  'ENTERPRISEPREMIUM_NOPSTNCONF':'Microsoft 365 E5 (No Audio Conf)','SPE_F1':'Microsoft 365 F3',
+  'M365_F1':'Microsoft 365 F1','DESKLESSPACK':'Microsoft 365 F1','DESKLESSWOFFPACK':'Microsoft 365 F3',
+  'STANDARDPACK':'Office 365 E1','STANDARDWOFFPACK':'Office 365 F3','DEVELOPERPACK':'Office 365 E3 Developer',
+  'AAD_PREMIUM':'Microsoft Entra ID P1','AAD_PREMIUM_P2':'Microsoft Entra ID P2','AAD_BASIC':'Microsoft Entra ID Basic',
+  'EMS':'Enterprise Mobility + Security E3','EMSPREMIUM':'Enterprise Mobility + Security E5',
+  'INTUNE_A':'Microsoft Intune Plan 1','INTUNE_A_D':'Microsoft Intune Plan 1 for Education',
+  'EXCHANGESTANDARD':'Exchange Online Plan 1','EXCHANGEENTERPRISE':'Exchange Online Plan 2',
+  'EXCHANGE_S_DESKLESS':'Exchange Online Kiosk','EXCHANGEARCHIVE_ADDON':'Exchange Online Archiving',
+  'SHAREPOINTSTANDARD':'SharePoint Online Plan 1','SHAREPOINTENTERPRISE':'SharePoint Online Plan 2',
+  'MCOMEETADV':'Microsoft Teams Audio Conferencing','MCOEV':'Microsoft Teams Phone Standard',
+  'MCOPSTN1':'Teams Domestic Calling Plan','MCOPSTN2':'Teams Domestic & International Calling Plan',
+  'Teams_Ess':'Microsoft Teams Essentials','TEAMS_EXPLORATORY':'Microsoft Teams Exploratory',
+  'ATP_ENTERPRISE':'Microsoft Defender for Office 365 P1','THREAT_INTELLIGENCE':'Microsoft Defender for Office 365 P2',
+  'WIN_DEF_ATP':'Microsoft Defender for Endpoint P2','DEFENDER_ENDPOINT_P1':'Microsoft Defender for Endpoint P1',
+  'FLOW_FREE':'Power Automate Free','POWERAPPS_VIRAL':'Power Apps Trial',
+  'POWER_BI_STANDARD':'Power BI (Free)','POWER_BI_PRO':'Power BI Pro','POWER_BI_PREMIUM_USER':'Power BI Premium Per User',
+  'PROJECTPREMIUM':'Project Plan 5','PROJECTPROFESSIONAL':'Project Plan 3','PROJECT_PLAN1_DEPT':'Project Plan 1',
+  'VISIOCLIENT':'Visio Plan 2','VISIOONLINE_PLAN1':'Visio Plan 1',
+  'WIN10_PRO_ENT_SUB':'Windows 10/11 Enterprise E3','WIN_ENT_E5':'Windows 10/11 Enterprise E5',
+  'DYN365_ENTERPRISE_PLAN1':'Dynamics 365 Customer Engagement Plan','DYN365_ENTERPRISE_SALES':'Dynamics 365 Sales Enterprise',
+  'DYN365_FINANCIALS_BUSINESS_SKU':'Dynamics 365 Business Central',
+  'RIGHTSMANAGEMENT':'Azure Information Protection P1','MIDSIZEPACK':'Office 365 Midsize Business',
+  'BUSINESS_VOICE_DIRECTROUTING':'Microsoft 365 Business Voice','POWERAPPS_DEV':'Power Apps Developer Plan',
+};
+function getFriendlyLicenseName(sku) { return LICENSE_NAMES[sku] || sku; }
+
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
-function OverviewTab({ data }) {
-  const { org, users, licenses, caStats, signInStats, intuneStats, securityIndicators } = data;
+function OverviewTab({ data, dateDays, setDateDays, onRefresh }) {
+  const { org, users, licenses, caStats, signInStats, intuneStats, securityIndicators, entraTier } = data;
 
   const licenseRows = useMemo(() => {
     if (!licenses) return [];
     return licenses.map(l => ({
-      name: l.skuPartNumber,
+      sku: l.skuPartNumber,
+      name: getFriendlyLicenseName(l.skuPartNumber),
       total: l.prepaidUnits?.enabled || 0,
       used: l.consumedUnits || 0,
-    })).filter(l => l.total > 0).sort((a, b) => b.used - a.used).slice(0, 8);
+    })).filter(l => l.total > 0).sort((a, b) => b.used - a.used).slice(0, 12);
   }, [licenses]);
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+      {/* Date period selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Sign-in data period:</span>
+        {[7, 14, 30].map(d => (
+          <button key={d} onClick={() => { setDateDays(d); onRefresh(d); }}
+            style={{ padding: '4px 14px', borderRadius: 99, fontSize: 13, fontWeight: dateDays === d ? 500 : 400,
+              border: `0.5px solid ${dateDays === d ? '#185FA5' : 'var(--color-border-secondary)'}`,
+              background: dateDays === d ? '#E6F1FB' : 'var(--color-background-primary)',
+              color: dateDays === d ? '#185FA5' : 'var(--color-text-secondary)', cursor: 'pointer' }}>
+            {d} days
+          </button>
+        ))}
+      </div>
+
       {/* Org identity banner */}
       {org && (
         <Card style={{ background: 'linear-gradient(135deg, #0C447C 0%, #185FA5 100%)', border: 'none' }}>
@@ -336,7 +384,7 @@ function OverviewTab({ data }) {
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 3 }}>
                 {org.verifiedDomains?.find(d => d.isDefault)?.name || org.id} · Tenant ID: {org.id?.slice(0, 8)}…
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 {org.assignedPlans?.some(p => p.servicePlanId && p.capabilityStatus === 'Enabled') && (
                   <span style={{ fontSize: 11, background: 'rgba(255,255,255,0.2)', color: '#fff',
                     padding: '2px 8px', borderRadius: 99 }}>Active</span>
@@ -345,6 +393,14 @@ function OverviewTab({ data }) {
                   padding: '2px 8px', borderRadius: 99 }}>
                   {org.countryLetterCode || 'Unknown country'}
                 </span>
+                {entraTier && (
+                  <span style={{ fontSize: 11, borderRadius: 99, padding: '2px 10px', fontWeight: 500,
+                    background: entraTier.includes('P2') ? '#FAC775' : 'rgba(255,255,255,0.22)',
+                    color: entraTier.includes('P2') ? '#412402' : '#fff',
+                    border: entraTier.includes('P2') ? 'none' : '0.5px solid rgba(255,255,255,0.4)' }}>
+                    {entraTier}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -369,7 +425,7 @@ function OverviewTab({ data }) {
         <MetricCard label="Intune Devices" value={intuneStats?.total?.toLocaleString()} icon={Monitor}
           color="#0F6E56" bgColor="#E1F5EE"
           sub={`${intuneStats?.compliant || 0} compliant`} />
-        <MetricCard label="Sign-ins (7d)" value={signInStats?.total?.toLocaleString()} icon={Activity}
+        <MetricCard label={`Sign-ins (${dateDays}d)`} value={signInStats?.total?.toLocaleString()} icon={Activity}
           color="#185FA5" bgColor="#E6F1FB"
           sub={`${signInStats?.failPct || 0}% failures`} />
       </div>
@@ -387,8 +443,8 @@ function OverviewTab({ data }) {
         <Card>
           <SectionTitle icon={Key} title="License allocation" sub="Purchased vs consumed" />
           <div style={{ display: 'grid', gap: 8 }}>
-            {licenseRows.map(l => (
-              <div key={l.name}>
+            {licenseRows.map(l, i) => (
+              <div key={l.sku}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                   <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, maxWidth: '70%',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
@@ -966,6 +1022,7 @@ export default function M365TenantDashboard() {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [dashData, setDashData] = useState(null);
+  const [dateDays, setDateDays] = useState(7);
 
   // Init MSAL
  useEffect(() => {
@@ -1007,14 +1064,14 @@ export default function M365TenantDashboard() {
   // Sign out
   const handleSignOut = useCallback(async () => {
     if (!msalInstance || !account) return;
-    await msalInstance.logoutRedurect({ account });
+    await msalInstance.logoutRedirect({ account });
     setAccount(null);
     setToken(null);
     setDashData(null);
   }, [msalInstance, account]);
 
   // Fetch all data
-  const fetchAll = useCallback(async (tk) => {
+  const fetchAll = useCallback(async (tk, days = 7) => {
     setLoading(true);
     setError(null);
     const data = {};
@@ -1054,10 +1111,16 @@ export default function M365TenantDashboard() {
         data.licenses = licRes.value || [];
       } catch { data.licenses = []; }
 
+      // Detect Entra ID tier
+      const hasP2 = (data.licenses || []).some(l =>
+        ['AAD_PREMIUM_P2','EMSPREMIUM','SPE_E5','ENTERPRISEPREMIUM'].includes(l.skuPartNumber) && l.consumedUnits > 0);
+      const hasP1 = (data.licenses || []).some(l =>
+        ['AAD_PREMIUM','EMS','SPE_E3','ENTERPRISEPACK'].includes(l.skuPartNumber) && l.consumedUnits > 0);
+      data.entraTier = hasP2 ? 'Microsoft Entra ID P2' : hasP1 ? 'Microsoft Entra ID P1' : 'Microsoft Entra ID Free';
+
       setLoadingStatus('Loading Conditional Access policies…');
       try {
-        const caRes = await graphGet(tk, '/identity/conditionalAccessPolicies');
-        const caPolicies = caRes.value || [];
+        const caPolicies = await graphGetAll(tk, '/identity/conditionalAccessPolicies?$top=200');
         data.caDetails = caPolicies;
         data.caStats = {
           total: caPolicies.length,
@@ -1075,7 +1138,7 @@ export default function M365TenantDashboard() {
 
       setLoadingStatus('Loading sign-in logs…');
       try {
-        const since = new Date(Date.now() - 7 * 86400000).toISOString();
+        const since = new Date(Date.now() - days * 86400000).toISOString();
         const siRes = await graphGet(tk, `/auditLogs/signIns?$filter=createdDateTime ge ${since}&$top=500&$select=id,createdDateTime,userDisplayName,userPrincipalName,appDisplayName,clientAppUsed,ipAddress,location,deviceDetail,status,riskLevelAggregated,isInteractive`);
         const signInList = siRes.value || [];
         const countries = new Set(signInList.map(s => s.location?.countryOrRegion).filter(Boolean));
@@ -1141,9 +1204,17 @@ export default function M365TenantDashboard() {
 
       setLoadingStatus('Evaluating security posture…');
       const hasMFAPolicy = (data.caDetails || []).some(p =>
-        p.state !== 'disabled' && p.grantControls?.builtInControls?.includes('mfa'));
+        p.state !== 'disabled' && (
+          p.grantControls?.builtInControls?.includes('mfa') ||
+          p.grantControls?.authenticationStrength != null ||
+          p.grantControls?.builtInControls?.includes('compliantDevice') ||
+          p.grantControls?.builtInControls?.includes('domainJoinedDevice')
+        ));
       const hasLegacyBlock = (data.caDetails || []).some(p =>
-        p.state !== 'disabled' && p.conditions?.clientAppTypes?.includes('exchangeActiveSync'));
+        p.state !== 'disabled' && (
+          p.conditions?.clientAppTypes?.includes('exchangeActiveSync') ||
+          p.conditions?.clientAppTypes?.includes('other')
+        ) && p.grantControls?.builtInControls?.includes('block'));
       const hasSecurityDefaults = data.org?.isSecurityDefaultsEnabled;
       data.securityIndicators = [
         {
@@ -1206,7 +1277,7 @@ export default function M365TenantDashboard() {
   useEffect(() => {
     if (!account || !msalInstance) return;
     acquireToken().then(tk => {
-      if (tk) { setToken(tk); fetchAll(tk); }
+      if (tk) { setToken(tk); fetchAll(tk, dateDays); }
     }).catch(e => setError(e.message));
   }, [account, msalInstance]);
 
@@ -1251,7 +1322,8 @@ export default function M365TenantDashboard() {
   if (!dashData) return null;
 
   const tabContent = {
-    overview: <OverviewTab data={dashData} />,
+    overview: <OverviewTab data={dashData} dateDays={dateDays} setDateDays={setDateDays}
+                 onRefresh={(d) => acquireToken().then(tk => tk && fetchAll(tk, d))} />,
     identity: <IdentityTab data={dashData} />,
     devices: <DevicesTab data={dashData} />,
     signins: <SignInsTab data={dashData} />,
