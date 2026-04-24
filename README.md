@@ -1,4 +1,4 @@
-# M365 Conditional Access Dashboard
+# M365 Tenant Snapshot Dashboard
 
 **Live site: [m365-ca-review.vercel.app](https://m365-ca-review.vercel.app)**
 
