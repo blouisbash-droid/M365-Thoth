@@ -443,7 +443,7 @@ function OverviewTab({ data, dateDays, setDateDays, onRefresh }) {
         <Card>
           <SectionTitle icon={Key} title="License allocation" sub="Purchased vs consumed" />
           <div style={{ display: 'grid', gap: 8 }}>
-            {licenseRows.map(l, i) => (
+            {licenseRows.map(l => (
               <div key={l.sku}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                   <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, maxWidth: '70%',
