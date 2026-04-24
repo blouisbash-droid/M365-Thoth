@@ -1,5 +1,6 @@
 'use client';
 
+import { AZURE_CLIENT_ID, AZURE_AUTHORITY } from '@/config';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Shield, Users, UserCheck, UserX, Key, Lock, Globe, Monitor,
@@ -17,12 +18,10 @@ import {
 // ─── MSAL / Graph Auth ───────────────────────────────────────────────────────
 import { PublicClientApplication, InteractionRequiredAuthError } from '@azure/msal-browser';
 
-import { AZURE_CLIENT_ID, AZURE_AUTHORITY } from '@/config';
-
 const MSAL_CONFIG = {
   auth: {
     clientId: AZURE_CLIENT_ID,
-    authority: 'AZURE_AUTHORITY',
+    authority: AZURE_AUTHORITY,
     redirectUri: typeof window !== 'undefined' ? window.location.origin : '/',
   },
   cache: { cacheLocation: 'localStorage' },
@@ -969,46 +968,46 @@ export default function M365TenantDashboard() {
   const [dashData, setDashData] = useState(null);
 
   // Init MSAL
-  useEffect(() => {
-    const instance = new PublicClientApplication(MSAL_CONFIG);
-    instance.initialize().then(() => {
-      setMsalInstance(instance);
+ useEffect(() => {
+  const instance = new PublicClientApplication(MSAL_CONFIG);
+  instance.initialize().then(() => {
+    instance.handleRedirectPromise().then((result) => {
+      if (result?.account) setAccount(result.account);
       const accounts = instance.getAllAccounts();
       if (accounts.length > 0) setAccount(accounts[0]);
-    });
-  }, []);
+    }).catch(() => {});
+    setMsalInstance(instance);
+  });
+}, []);
 
   // Acquire token silently or interactively
   const acquireToken = useCallback(async () => {
-    if (!msalInstance || !account) return null;
-    try {
-      const result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
-      return result.accessToken;
-    } catch (e) {
-      if (e instanceof InteractionRequiredAuthError) {
-        const result = await msalInstance.acquireTokenPopup({ scopes: SCOPES });
-        setAccount(result.account);
-        return result.accessToken;
-      }
-      throw e;
+  if (!msalInstance || !account) return null;
+  try {
+    const result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
+    return result.accessToken;
+  } catch (e) {
+    if (e instanceof InteractionRequiredAuthError) {
+      await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account });
     }
-  }, [msalInstance, account]);
+    throw e;
+  }
+}, [msalInstance, account]);
 
   // Login
   const handleLogin = useCallback(async () => {
-    if (!msalInstance) return;
-    try {
-      const result = await msalInstance.loginPopup({ scopes: SCOPES });
-      setAccount(result.account);
-    } catch (e) {
-      setError('Login failed: ' + e.message);
-    }
-  }, [msalInstance]);
+  if (!msalInstance) return;
+  try {
+    await msalInstance.loginRedirect({ scopes: SCOPES });
+  } catch (e) {
+    setError('Login failed: ' + e.message);
+  }
+}, [msalInstance]);
 
   // Sign out
   const handleSignOut = useCallback(async () => {
     if (!msalInstance || !account) return;
-    await msalInstance.logoutPopup({ account });
+    await msalInstance.logoutRedurect({ account });
     setAccount(null);
     setToken(null);
     setDashData(null);
@@ -1234,7 +1233,7 @@ export default function M365TenantDashboard() {
         <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8, color: 'var(--color-text-primary)' }}>Error loading data</div>
         <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>{error}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-          <button onClick={() => acquireToken().then(tk => tk && fetchAll(tk))}
+          <button onClick={() => acquireToken().then(tk => tk && fetchAll(tk, dateDays))}
             style={{ padding: '8px 16px', borderRadius: 8, border: '0.5px solid #B5D4F4', background: '#185FA5',
               color: '#fff', fontSize: 13, cursor: 'pointer' }}>
             Retry
@@ -1291,7 +1290,7 @@ export default function M365TenantDashboard() {
               Live data from Microsoft Graph · {new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
             </p>
           </div>
-          <button onClick={() => acquireToken().then(tk => tk && fetchAll(tk))}
+          <button onClick={() => acquireToken().then(tk => tk && fetchAll(tk, dateDays))}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7,
               border: '0.5px solid var(--color-border-secondary)', background: 'var(--color-background-primary)',
               color: 'var(--color-text-primary)', fontSize: 13, cursor: 'pointer' }}>
