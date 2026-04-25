@@ -63,7 +63,7 @@ async function graphGetAll(token, path) {
   let url = `https://graph.microsoft.com/v1.0${path}`;
   while (url) {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) break;
+    if (!res.ok) throw new Error(`graphGetAll ${path} → ${res.status} ${res.statusText}`);
     const data = await res.json();
     items = items.concat(data.value || []);
     url = data['@odata.nextLink'] || null;
@@ -1075,6 +1075,7 @@ export default function M365TenantDashboard() {
 
   // Fetch all data
   const fetchAll = useCallback(async (tk, days = 7) => {
+    const account = msalInstance?.getAllAccounts()?.[0];
     setLoading(true);
     setError(null);
     const data = {};
@@ -1123,7 +1124,13 @@ export default function M365TenantDashboard() {
 
       setLoadingStatus('Loading Conditional Access policies…');
       try {
-        const caPolicies = await graphGetAll(tk, '/identity/conditionalAccessPolicies?$top=200');
+        // Refresh token before this call — it's deep in the fetch sequence
+        let caTk = tk;
+        try {
+          const fresh = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
+          caTk = fresh.accessToken;
+        } catch {}
+        const caPolicies = await graphGetAll(caTk, '/identity/conditionalAccessPolicies?$top=200');
         data.caDetails = caPolicies;
         data.caStats = {
           total: caPolicies.length,
