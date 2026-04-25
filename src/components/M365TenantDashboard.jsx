@@ -1130,7 +1130,7 @@ export default function M365TenantDashboard() {
           const fresh = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
           caTk = fresh.accessToken;
         } catch {}
-        const caPolicies = await graphGetAll(caTk, '/identity/conditionalAccessPolicies?$top=200');
+        const caPolicies = await graphGetAll(caTk, '/identity/conditionalAccessPolicies');
         data.caDetails = caPolicies;
         data.caStats = {
           total: caPolicies.length,
@@ -1142,7 +1142,7 @@ export default function M365TenantDashboard() {
 
       setLoadingStatus('Loading named locations…');
       try {
-        const nlRes = await graphGet(tk, '/identity/conditionalAccessPolicies/namedLocations');
+        const nlRes = await graphGet(tk, '/identity/namedLocations');
         data.namedLocations = nlRes.value || [];
       } catch { data.namedLocations = []; }
 
@@ -1206,7 +1206,7 @@ export default function M365TenantDashboard() {
 
       setLoadingStatus('Loading auth methods…');
       try {
-        const authRes = await graphGetBeta(tk, '/reports/authenticationMethods/usersRegisteredByMethod?$top=999');
+        const authRes = await graphGetBeta(tk, '/reports/authenticationMethods/usersRegisteredByMethod');
         const total = authRes.value?.length || 0;
         const mfaReg = authRes.value?.filter(u => u.isMfaRegistered)?.length || 0;
         data.authMethods = { mfaRegistered: mfaReg, total, mfaPct: total ? Math.round((mfaReg / total) * 100) : 0 };
