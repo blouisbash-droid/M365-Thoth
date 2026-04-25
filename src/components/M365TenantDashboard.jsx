@@ -337,7 +337,10 @@ const LICENSE_NAMES = {
   'DYN365_ENTERPRISE_PLAN1':'Dynamics 365 Customer Engagement Plan','DYN365_ENTERPRISE_SALES':'Dynamics 365 Sales Enterprise',
   'DYN365_FINANCIALS_BUSINESS_SKU':'Dynamics 365 Business Central',
   'RIGHTSMANAGEMENT':'Azure Information Protection P1','MIDSIZEPACK':'Office 365 Midsize Business',
-  'BUSINESS_VOICE_DIRECTROUTING':'Microsoft 365 Business Voice','POWERAPPS_DEV':'Power Apps Developer Plan',
+  'BUSINESS_VOICE_DIRECTROUTING':'Microsoft 365 Business Voice','POWERAPPS_DEV':'Power Apps Developer Plan', 
+  'CPC_E_2C_8GB_128GB':      'Windows 365 Enterprise 2vCPU 8GB','PHONESYSTEM_VIRTUALUSER': 'Teams Phone Resource Account',
+  'CCIBOTS_PRIVPREV_VIRAL':  'Copilot Studio Viral Trial','Microsoft_365_Copilot':   'Microsoft 365 Copilot',
+  'COPILOT_STUDIO_VIRAL':    'Copilot Studio Trial','MCOEV_VIRTUALUSER':       'Teams Phone Resource Account',
 };
 function getFriendlyLicenseName(sku) { return LICENSE_NAMES[sku] || sku; }
 
