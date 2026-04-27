@@ -43,11 +43,15 @@ const SCOPES = [
 async function graphGet(token, path) {
   const base = 'https://graph.microsoft.com/v1.0';
   const betaBase = 'https://graph.microsoft.com/beta';
-  const url = path.startsWith('http') ? path : `${path.startsWith('/beta') ? betaBase : base}${path}`;
-  const res = await fetch(url.startsWith('http') ? url : `${base}${path}`, {
+  const url = path.startsWith('http') ? path
+    : `${path.startsWith('/beta') ? betaBase : base}${path}`;
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(`Graph ${path} → ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(`Graph ${path} → ${res.status}: ${body?.error?.message || JSON.stringify(body)}`);
+  }
   return res.json();
 }
 
@@ -62,8 +66,13 @@ async function graphGetAll(token, path) {
   let items = [];
   let url = `https://graph.microsoft.com/v1.0${path}`;
   while (url) {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error(`graphGetAll ${path} → ${res.status} ${res.statusText}`);
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(`Graph ${path} → ${res.status}: ${body?.error?.message || JSON.stringify(body)}`);
+    }
     const data = await res.json();
     items = items.concat(data.value || []);
     url = data['@odata.nextLink'] || null;
