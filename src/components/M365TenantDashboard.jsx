@@ -249,7 +249,7 @@ function Navbar({ userName, userEmail, tenantName, onSignOut, activeTab, setActi
 
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'var(--color-background-primary)',
-      borderBottom: '0.5px solid var(--color-border-tertiary)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+      borderBottom: '0.5px solid var(--color-border-tertiary)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 20px' }}>
         <div style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -354,7 +354,7 @@ const LICENSE_NAMES = {
 function getFriendlyLicenseName(sku) { return LICENSE_NAMES[sku] || sku; }
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
-function OverviewTab({ data, dateDays, setDateDays, onRefresh }) {
+function OverviewTab({ data, dateDays, setDateDays, onRefresh, setActiveTab }) {
   const { org, users, licenses, caStats, signInStats, intuneStats, securityIndicators, entraTier } = data;
 
   const licenseRows = useMemo(() => {
@@ -394,7 +394,7 @@ function OverviewTab({ data, dateDays, setDateDays, onRefresh }) {
             <div>
               <div style={{ fontSize: 20, fontWeight: 500, color: '#fff' }}>{org.displayName}</div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 3 }}>
-                {org.verifiedDomains?.find(d => d.isDefault)?.name || org.id} · Tenant ID: {org.id?.slice(0, 8)}…
+                {org.verifiedDomains?.find(d => d.isDefault)?.name || org.id} · Tenant ID: {org.id}
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 {org.assignedPlans?.some(p => p.servicePlanId && p.capabilityStatus === 'Enabled') && (
@@ -419,27 +419,23 @@ function OverviewTab({ data, dateDays, setDateDays, onRefresh }) {
         </Card>
       )}
 
-      {/* Key metrics grid */}
+      {/* Key metrics grid — clickable */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-        <MetricCard label="Total Users" value={users?.total?.toLocaleString()} icon={Users}
-          color="#185FA5" bgColor="#E6F1FB"
-          sub={`${users?.enabled?.toLocaleString() || 0} enabled`} />
-        <MetricCard label="Guest Users" value={users?.guests?.toLocaleString()} icon={Globe}
-          color="#0F6E56" bgColor="#E1F5EE"
-          sub="External identities" />
-        <MetricCard label="Global Admins" value={users?.globalAdmins?.toLocaleString()} icon={Crown}
-          color={users?.globalAdmins > 3 ? '#A32D2D' : '#185FA5'}
-          bgColor={users?.globalAdmins > 3 ? '#FCEBEB' : '#E6F1FB'}
-          sub={users?.globalAdmins > 3 ? 'Consider reducing' : 'Recommended ≤ 3'} />
-        <MetricCard label="CA Policies" value={caStats?.total} icon={ShieldCheck}
-          color="#534AB7" bgColor="#EEEDFE"
-          sub={`${caStats?.enabled || 0} enabled`} />
-        <MetricCard label="Intune Devices" value={intuneStats?.total?.toLocaleString()} icon={Monitor}
-          color="#0F6E56" bgColor="#E1F5EE"
-          sub={`${intuneStats?.compliant || 0} compliant`} />
-        <MetricCard label={`Sign-ins (${dateDays}d)`} value={signInStats?.total?.toLocaleString()} icon={Activity}
-          color="#185FA5" bgColor="#E6F1FB"
-          sub={`${signInStats?.failPct || 0}% failures`} />
+        {[
+          { label: 'Total Users', value: users?.total?.toLocaleString(), icon: Users, color: '#185FA5', bgColor: '#E6F1FB', sub: `${users?.enabled?.toLocaleString() || 0} enabled`, tab: 'identity' },
+          { label: 'Guest Users', value: users?.guests?.toLocaleString(), icon: Globe, color: '#0F6E56', bgColor: '#E1F5EE', sub: 'External identities', tab: 'identity' },
+          { label: 'Global Admins', value: users?.globalAdmins?.toLocaleString(), icon: Crown, color: users?.globalAdmins > 3 ? '#A32D2D' : '#185FA5', bgColor: users?.globalAdmins > 3 ? '#FCEBEB' : '#E6F1FB', sub: users?.globalAdmins > 3 ? 'Consider reducing' : 'Recommended ≤ 3', tab: 'security' },
+          { label: 'CA Policies', value: caStats?.total, icon: ShieldCheck, color: '#534AB7', bgColor: '#EEEDFE', sub: `${caStats?.enabled || 0} enabled`, tab: 'identity' },
+          { label: 'Intune Devices', value: intuneStats?.total?.toLocaleString(), icon: Monitor, color: '#0F6E56', bgColor: '#E1F5EE', sub: `${intuneStats?.compliant || 0} compliant`, tab: 'devices' },
+          { label: `Sign-ins (${dateDays}d)`, value: signInStats?.total?.toLocaleString(), icon: Activity, color: '#185FA5', bgColor: '#E6F1FB', sub: `${signInStats?.failPct || 0}% failures`, tab: 'signins' },
+        ].map(card => (
+          <div key={card.label} onClick={() => setActiveTab(card.tab)}
+            style={{ cursor: 'pointer', transition: 'transform 0.1s, box-shadow 0.1s', borderRadius: 'var(--border-radius-md)' }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.10)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}>
+            <MetricCard label={card.label} value={card.value} icon={card.icon} color={card.color} bgColor={card.bgColor} sub={card.sub} />
+          </div>
+        ))}
       </div>
 
       {/* Security posture + license usage */}
@@ -483,14 +479,31 @@ function OverviewTab({ data, dateDays, setDateDays, onRefresh }) {
 function IdentityTab({ data }) {
   const { users, caDetails, namedLocations, authMethods } = data;
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all'); // all | member | guest
+  const [statusFilter, setStatusFilter] = useState('all'); // all | active | disabled
+  const [caFilter, setCaFilter] = useState('all'); // all | enabled | disabled | reportOnly
 
   const filteredUsers = useMemo(() => {
     if (!users?.list) return [];
     const q = search.toLowerCase();
-    return users.list.filter(u =>
-      !q || u.displayName?.toLowerCase().includes(q) || u.userPrincipalName?.toLowerCase().includes(q)
-    ).slice(0, 50);
-  }, [users, search]);
+    return users.list.filter(u => {
+      if (q && !u.displayName?.toLowerCase().includes(q) && !u.userPrincipalName?.toLowerCase().includes(q)) return false;
+      if (typeFilter === 'member' && u.userType === 'Guest') return false;
+      if (typeFilter === 'guest' && u.userType !== 'Guest') return false;
+      if (statusFilter === 'active' && !u.accountEnabled) return false;
+      if (statusFilter === 'disabled' && u.accountEnabled) return false;
+      return true;
+    }).slice(0, 100);
+  }, [users, search, typeFilter, statusFilter]);
+
+  const filteredCA = useMemo(() => {
+    if (!caDetails) return [];
+    if (caFilter === 'all') return caDetails;
+    if (caFilter === 'enabled') return caDetails.filter(p => p.state === 'enabled');
+    if (caFilter === 'disabled') return caDetails.filter(p => p.state === 'disabled');
+    if (caFilter === 'reportOnly') return caDetails.filter(p => p.state === 'enabledForReportingButNotEnforced');
+    return caDetails;
+  }, [caDetails, caFilter]);
 
   const policyStateColor = (state) => ({
     enabled: { bg: '#EAF3DE', color: '#27500A', border: '#C0DD97' },
@@ -517,16 +530,31 @@ function IdentityTab({ data }) {
 
       {/* User table */}
       <Card>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <SectionTitle icon={Users} title="User directory" sub={`Showing up to 50 of ${users?.total || 0}`} />
-          <div style={{ position: 'relative' }}>
-            <Search size={13} color="var(--color-text-secondary)"
-              style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)' }} />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search users…"
-              style={{ paddingLeft: 28, paddingRight: 10, height: 30, fontSize: 12, borderRadius: 7,
-                border: '0.5px solid var(--color-border-secondary)', background: 'var(--color-background-secondary)',
-                color: 'var(--color-text-primary)', outline: 'none', width: 200 }} />
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <SectionTitle icon={Users} title="User directory" sub={`${filteredUsers.length} shown of ${users?.total || 0}`} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 140 }}>
+              <Search size={13} color="var(--color-text-secondary)"
+                style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)' }} />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search by name or UPN…"
+                style={{ paddingLeft: 28, paddingRight: 10, height: 30, fontSize: 12, borderRadius: 7, width: '100%',
+                  border: '0.5px solid var(--color-border-secondary)', background: 'var(--color-background-secondary)',
+                  color: 'var(--color-text-primary)', outline: 'none' }} />
+            </div>
+            {[
+              { key: 'typeFilter', val: typeFilter, set: setTypeFilter, opts: [['all','All types'],['member','Members only'],['guest','Guests only']] },
+              { key: 'statusFilter', val: statusFilter, set: setStatusFilter, opts: [['all','All status'],['active','Active only'],['disabled','Disabled only']] },
+            ].map(f => (
+              <select key={f.key} value={f.val} onChange={e => f.set(e.target.value)}
+                style={{ height: 30, padding: '0 8px', fontSize: 12, borderRadius: 7, cursor: 'pointer',
+                  border: '0.5px solid var(--color-border-secondary)', background: 'var(--color-background-secondary)',
+                  color: 'var(--color-text-primary)', outline: 'none' }}>
+                {f.opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            ))}
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -589,10 +617,21 @@ function IdentityTab({ data }) {
 
       {/* CA Policies */}
       <Card>
-        <SectionTitle icon={ShieldCheck} title="Conditional Access policies"
-          sub={`${caDetails?.length || 0} policies configured`} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <SectionTitle icon={ShieldCheck} title="Conditional Access policies"
+            sub={`${filteredCA.length} of ${caDetails?.length || 0} policies`} />
+          <select value={caFilter} onChange={e => setCaFilter(e.target.value)}
+            style={{ height: 30, padding: '0 8px', fontSize: 12, borderRadius: 7, cursor: 'pointer',
+              border: '0.5px solid var(--color-border-secondary)', background: 'var(--color-background-secondary)',
+              color: 'var(--color-text-primary)', outline: 'none' }}>
+            <option value="all">All states</option>
+            <option value="enabled">Enabled only</option>
+            <option value="reportOnly">Report only</option>
+            <option value="disabled">Disabled only</option>
+          </select>
+        </div>
         <div style={{ display: 'grid', gap: 8 }}>
-          {(caDetails || []).map(p => {
+          {(filteredCA || []).map(p => {
             const st = policyStateColor(p.state);
             return (
               <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -607,7 +646,7 @@ function IdentityTab({ data }) {
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)', marginBottom: 3 }}>
                     {p.displayName}
                   </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
                     <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 99,
                       background: st.bg, color: st.color, border: `0.5px solid ${st.border}` }}>
                       {p.state === 'enabledForReportingButNotEnforced' ? 'Report only' : p.state}
@@ -624,6 +663,10 @@ function IdentityTab({ data }) {
                       <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 99,
                         background: '#E6F1FB', color: '#042C53', border: '0.5px solid #85B7EB' }}>Compliant device</span>
                     )}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', display: 'flex', gap: 12 }}>
+                    {p.createdDateTime && <span>Created: {fmtDate(p.createdDateTime)}</span>}
+                    {p.modifiedDateTime && <span>Modified: {fmtDate(p.modifiedDateTime)}</span>}
                   </div>
                 </div>
               </div>
@@ -776,18 +819,23 @@ function DevicesTab({ data }) {
 }
 
 // ─── Sign-in Activity Tab ─────────────────────────────────────────────────────
+const PIE_COLORS = ['#378ADD','#639922','#BA7517','#E24B4A','#7F77DD','#1D9E75','#D85A30','#0891b2','#D4537E','#888780'];
+
 function SignInsTab({ data }) {
   const { signIns } = data;
   const [osFilter, setOsFilter] = useState('');
   const [appFilter, setAppFilter] = useState('');
+  const [userSearch, setUserSearch] = useState('');
 
   const filtered = useMemo(() => {
     if (!signIns?.list) return [];
+    const uq = userSearch.toLowerCase();
     return signIns.list.filter(s =>
       (!osFilter || s.deviceDetail?.operatingSystem?.toLowerCase().includes(osFilter.toLowerCase())) &&
-      (!appFilter || s.appDisplayName?.toLowerCase().includes(appFilter.toLowerCase()))
+      (!appFilter || s.appDisplayName?.toLowerCase().includes(appFilter.toLowerCase())) &&
+      (!uq || s.userDisplayName?.toLowerCase().includes(uq) || s.userPrincipalName?.toLowerCase().includes(uq))
     );
-  }, [signIns, osFilter, appFilter]);
+  }, [signIns, osFilter, appFilter, userSearch]);
 
   const locationData = useMemo(() => {
     const counts = {};
@@ -825,26 +873,32 @@ function SignInsTab({ data }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <Card>
           <SectionTitle icon={Globe} title="Top countries" sub="Sign-in origin by country" />
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={locationData} layout="vertical" margin={{ left: 0, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-tertiary)" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '0.5px solid var(--color-border-tertiary)' }} />
-              <Bar dataKey="value" name="Sign-ins" fill="#378ADD" radius={[0, 4, 4, 0]} maxBarSize={18} />
-            </BarChart>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie data={locationData} cx="50%" cy="50%" innerRadius="35%" outerRadius="65%"
+                dataKey="value" paddingAngle={2} label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`}
+                labelLine={false} fontSize={10}>
+                {locationData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="none" />)}
+              </Pie>
+              <Tooltip formatter={(v, n) => [v.toLocaleString(), 'Sign-ins']}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '0.5px solid var(--color-border-tertiary)' }} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+            </PieChart>
           </ResponsiveContainer>
         </Card>
         <Card>
           <SectionTitle icon={Server} title="Top applications" sub="Most-used apps by sign-in volume" />
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={appData} layout="vertical" margin={{ left: 0, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-tertiary)" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 10, fill: 'var(--color-text-secondary)' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '0.5px solid var(--color-border-tertiary)' }} />
-              <Bar dataKey="value" name="Sign-ins" fill="#7F77DD" radius={[0, 4, 4, 0]} maxBarSize={18} />
-            </BarChart>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie data={appData} cx="50%" cy="50%" innerRadius="35%" outerRadius="65%"
+                dataKey="value" paddingAngle={2} label={({ name, percent }) => percent > 0.05 ? `${(percent*100).toFixed(0)}%` : ''}
+                labelLine={false} fontSize={10}>
+                {appData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="none" />)}
+              </Pie>
+              <Tooltip formatter={(v, n, p) => [v.toLocaleString(), p?.payload?.name || 'Sign-ins']}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '0.5px solid var(--color-border-tertiary)' }} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+            </PieChart>
           </ResponsiveContainer>
         </Card>
       </div>
@@ -852,13 +906,20 @@ function SignInsTab({ data }) {
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <SectionTitle icon={Activity} title="Sign-in log" sub={`${filtered.length} entries`} />
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={12} color="var(--color-text-secondary)"
+                style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)' }} />
+              <input value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Search user…"
+                style={{ paddingLeft: 26, paddingRight: 8, height: 28, fontSize: 12, borderRadius: 6, border: '0.5px solid var(--color-border-secondary)',
+                  background: 'var(--color-background-secondary)', color: 'var(--color-text-primary)', outline: 'none', width: 140 }} />
+            </div>
             <input value={osFilter} onChange={e => setOsFilter(e.target.value)} placeholder="Filter OS…"
               style={{ height: 28, padding: '0 10px', fontSize: 12, borderRadius: 6, border: '0.5px solid var(--color-border-secondary)',
-                background: 'var(--color-background-secondary)', color: 'var(--color-text-primary)', outline: 'none', width: 110 }} />
+                background: 'var(--color-background-secondary)', color: 'var(--color-text-primary)', outline: 'none', width: 100 }} />
             <input value={appFilter} onChange={e => setAppFilter(e.target.value)} placeholder="Filter app…"
               style={{ height: 28, padding: '0 10px', fontSize: 12, borderRadius: 6, border: '0.5px solid var(--color-border-secondary)',
-                background: 'var(--color-background-secondary)', color: 'var(--color-text-primary)', outline: 'none', width: 120 }} />
+                background: 'var(--color-background-secondary)', color: 'var(--color-text-primary)', outline: 'none', width: 110 }} />
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -919,17 +980,23 @@ function SecurityTab({ data }) {
           sub={`${globalAdminsList?.length || 0} accounts with Global Admin role`} />
         {globalAdminsList?.length > 3 && (
           <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8,
-            background: '#FCEBEB', border: '0.5px solid #F7C1C1', fontSize: 13, color: '#791F1F' }}>
+            background: globalAdminsList.length > 5 ? '#FCEBEB' : '#FAEEDA',
+            border: `0.5px solid ${globalAdminsList.length > 5 ? '#F7C1C1' : '#FAC775'}`,
+            fontSize: 13, color: globalAdminsList.length > 5 ? '#791F1F' : '#633806' }}>
             <AlertTriangle size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: -2 }} />
-            {globalAdminsList.length} Global Admins detected. Microsoft recommends 2–4 maximum. Consider converting excess admins to lower-privilege roles.
+            {globalAdminsList.length} Global Admins detected —{' '}
+            {globalAdminsList.length > 5 ? 'Critical: significantly exceeds recommended maximum of 3.' : 'Elevated: above recommended maximum of 3.'}
+            {' '}Consider converting excess admins to lower-privilege roles.
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
           {(globalAdminsList || []).map(u => (
             <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
               borderRadius: 8, border: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#FAEEDA',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 500, color: '#633806', flexShrink: 0 }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%',
+                background: globalAdminsList.length <= 3 ? '#EAF3DE' : globalAdminsList.length <= 5 ? '#FAEEDA' : '#FCEBEB',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 500,
+                color: globalAdminsList.length <= 3 ? '#27500A' : globalAdminsList.length <= 5 ? '#633806' : '#791F1F', flexShrink: 0 }}>
                 {u.displayName?.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
               </div>
               <div style={{ minWidth: 0 }}>
@@ -1342,6 +1409,7 @@ export default function M365TenantDashboard() {
 
   const tabContent = {
     overview: <OverviewTab data={dashData} dateDays={dateDays} setDateDays={setDateDays}
+                 setActiveTab={setActiveTab}
                  onRefresh={(d) => acquireToken().then(tk => tk && fetchAll(tk, d))} />,
     identity: <IdentityTab data={dashData} />,
     devices: <DevicesTab data={dashData} />,
