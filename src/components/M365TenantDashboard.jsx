@@ -22,7 +22,7 @@ const MSAL_CONFIG = {
   auth: {
     clientId: AZURE_CLIENT_ID,
     authority: AZURE_AUTHORITY,
-    redirectUri: typeof window !== 'undefined' ? window.location.origin : '/',
+    redirectUri: typeof window !== 'undefined' ? window.location.origin + '/dashboard': '/dashboard',
   },
   cache: { cacheLocation: 'localStorage' },
 };
@@ -1206,7 +1206,7 @@ export default function M365TenantDashboard() {
           const fresh = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
           caTk = fresh.accessToken;
         } catch {}
-        const caPolicies = await graphGetAll(caTk, '/identity/conditionalAccessPolicies');
+        const caPolicies = await graphGetAll(caTk, '/identity/conditionalAccess/policies');
         data.caDetails = caPolicies;
         data.caStats = {
           total: caPolicies.length,
@@ -1218,7 +1218,7 @@ export default function M365TenantDashboard() {
 
       setLoadingStatus('Loading named locations…');
       try {
-        const nlRes = await graphGet(tk, '/identity/namedLocations');
+        const nlRes = await graphGet(tk, '/identity/conditionalAccess/namedLocations');
         data.namedLocations = nlRes.value || [];
       } catch { data.namedLocations = []; }
 
