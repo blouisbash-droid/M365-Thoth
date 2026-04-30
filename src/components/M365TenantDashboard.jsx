@@ -22,7 +22,7 @@ const MSAL_CONFIG = {
   auth: {
     clientId: AZURE_CLIENT_ID,
     authority: AZURE_AUTHORITY,
-    redirectUri: typeof window !== 'undefined' ? window.location.origin : '/',
+    redirectUri: typeof window !== 'undefined' ? window.location.origin + '/dashboard': '/dashboard',
   },
   cache: { cacheLocation: 'localStorage' },
 };
